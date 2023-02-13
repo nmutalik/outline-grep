@@ -9,7 +9,8 @@ outline based on indentation, and preserves this structure in its output.
 > import Data.Monoid (mappend, mempty)
 > import System.IO (Handle, hGetContents, openFile, IOMode(ReadMode), stdin)
 > import System.Environment (getArgs)
-> import Text.Regex.Posix ((=~))
+> import Text.Regex.PCRE ((=~))
+> import Text.Regex (mkRegex, subRegex)
 
 An outline has three parts: The first node, its children (another outline),
 and the remaining nodes (also an outline).  The outline with zero nodes is
@@ -31,8 +32,14 @@ This helper function tells if an outline is empty.
 We group input lines into nodes by the amount of leading whitespace.  A tab
 counts the same as a space, so you may not want to mix tabs and spaces.
 
+> ansiRegex = mkRegex "\\[([0-9]+;?)+m" 
+
+> filterAnsi :: String -> String
+> filterAnsi line = subRegex ansiRegex stripped ""
+>   where stripped = filter (/= '\ESC') line
+
 > indentLevel :: String -> Int
-> indentLevel = length . takeWhile isSpace
+> indentLevel = length . takeWhile isSpace . filterAnsi
 
 readNodes reads a series of nodes starting at a specified column.  It returns
 the nodes as an outline, along with any remaining lines.
@@ -41,7 +48,8 @@ the nodes as an outline, along with any remaining lines.
 > readNodes col []     = (Empty, [])
 > readNodes col (x:xs) =
 >     let n = indentLevel x in
->     if n < col then (Empty, x:xs)
+>     if length (filterAnsi x) == n then (Empty, xs)
+>     else if n < col then (Empty, x:xs)
 >                else let (children, xs')  = readNodes (n+1) xs
 >                         (rest,     xs'') = readNodes col   xs'
 >                     in ((Outline x children rest), xs'')
@@ -76,7 +84,7 @@ outline using the regex, and prints the result.
 > main = do
 >     (pattern:fileNames) <- getArgs
 >     s <- input fileNames
->     putStr $ prettyPrint $ prune (=~ pattern) $ readOutline s
+>     putStr $ prettyPrint $ prune ((=~ pattern) . filterAnsi) $ readOutline s
 
 We concatenate all the named files, or read from stdin if there are none.
 
